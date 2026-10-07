@@ -1,6 +1,13 @@
 import os
+import asyncio
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    ContextTypes,
+    filters,
+)
 from openai import OpenAI
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -9,51 +16,47 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 SYSTEM_PROMPT = """
-You are MLBB AI Coach.
+You are an MLBB AI Coach.
 
-You specialize in Mobile Legends: Bang Bang (MLBB).
+You specialize in Mobile Legends: Bang Bang.
 
-Help users with:
+Help with:
 - Hero builds
-- Emblems
 - Counters
-- Draft picks
+- Emblems
+- Draft
 - Lane matchups
-- Jungling
-- Roaming
+- Jungle
+- Roam
 - EXP lane
 - Mid lane
 - Gold lane
 - Rotation
 - Macro and micro
-- Team compositions
-- Current meta when information is available
+- Team composition
+- Meta
 
-Answer in the same language the user uses.
-If the user speaks Burmese, answer in Burmese.
-Keep answers clear and practical.
-Do not invent patch-specific facts when you are unsure.
+Reply in the same language as the user.
+If the user speaks Burmese, reply in Burmese.
+Give practical and clear answers.
+Do not invent facts when uncertain.
 """
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🔥 MLBB AI Coach မှ ကြိုဆိုပါတယ်!\n\n"
-        "MLBB နဲ့ပတ်သက်တာ ဘာမဆိုမေးနိုင်ပါတယ်။\n\n"
-        "ဥပမာ:\n"
-        "• Fredrinn ကို ဘယ် hero တွေ counter လဲ?\n"
-        "• Roam rotation ဘယ်လိုလုပ်ရမလဲ?\n"
-        "• Solo rank အတွက် build ပေးပါ\n"
-        "• ဒီ draft ကို ဘယ်လို counter လုပ်မလဲ?"
+        "🔥 MLBB AI Coach\n\n"
+        "MLBB နဲ့ပတ်သက်တာ ဘာမဆိုမေးနိုင်ပါတယ်!"
     )
 
-async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_text = update.message.text
 
+async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
+        user_text = update.message.text
+
         response = client.responses.create(
             model="gpt-5-mini",
             instructions=SYSTEM_PROMPT,
-            input=user_text
+            input=user_text,
         )
 
         answer = response.output_text
@@ -61,21 +64,46 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(answer)
 
     except Exception as e:
-        print("ERROR:", e)
+        print("OPENAI ERROR:", repr(e))
+
         await update.message.reply_text(
-            "⚠️ AI server error ဖြစ်နေပါတယ်။ ခဏနေရင် ပြန်မေးပါ။"
+            "⚠️ AI server error ဖြစ်နေပါတယ်။"
         )
 
-def main():
-    app = Application.builder().token(TELEGRAM_TOKEN).build()
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, chat)
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+    print("TELEGRAM ERROR:", repr(context.error))
+
+
+def main():
+    app = (
+        Application.builder()
+        .token(TELEGRAM_TOKEN)
+        .connect_timeout(30)
+        .read_timeout(30)
+        .write_timeout(30)
+        .pool_timeout(30)
+        .build()
     )
 
-    print("MLBB AI Bot is running...")
-    app.run_polling()
+    app.add_handler(CommandHandler("start", start))
+
+    app.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            chat
+        )
+    )
+
+    app.add_error_handler(error_handler)
+
+    print("🔥 MLBB AI Bot started!")
+
+    app.run_polling(
+        drop_pending_updates=True,
+        timeout=30,
+    )
+
 
 if __name__ == "__main__":
     main()
